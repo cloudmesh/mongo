@@ -1,5 +1,5 @@
 cloud:
-  name: india
+  cloud: india
   project: fg452
 
 config:
