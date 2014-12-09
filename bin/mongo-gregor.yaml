@@ -1,0 +1,12 @@
+cloud:
+  name: india
+  project: fg452
+
+config:
+  group_postfix: mongo-cluster
+  login: ubuntu
+  flavor: m1.medium
+  count: 3
+  image: fg452/rsinghania-001/my-ubuntu-01
+  
+
