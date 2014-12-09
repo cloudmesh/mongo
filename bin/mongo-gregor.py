@@ -59,23 +59,45 @@ class deploy_mongo(object):
         self._execute(commands)
                         
     def _create_cluster(self):
-        commands = [str('cluster create '
+        commands = str('cluster create '
                       ' --force'
                       ' --count={count}'
                       ' --group={groupname}'
                       ' --ln={login}'
                       ' --cloud={cloud}'
                       ' --flavor={flavor}'
-                      ' --image={image}'.format(**self.data))]
-        self._execute(commands)
-            
+                      ' --image={image}'.format(**self.data))
+        self._execute(commands)        
 
+    def _vm_names_cluster(self):
+        '''Display the list of all the VMs in the group'''
+        command = 'group show {groupname} --format=json'.format(**self.data)
+        print "cm>", command
+        json_data = cloudmesh.shell(command)
+        pprint(json_data)
+        if not 'VM' in json_data:
+            vm_list = []
+        vms = json.loads(json_data.replace("\n"," "))            
+        vm_list = vms["VM"]
+        vm_list = [x.encode('UTF8') for x in vm_list]
+        return vm_list
+
+    def _ips_cluster(self):
+        vms = self._vm_names_cluster()
+        vms_string = ",".join(vms)
+        command = 'vm ip show --names="{0}" --format=json'.format(vms_string)
+        print "cm>", command
+        json_data = cloudmesh.shell(command)
+        ip_data = json.loads(json_data.replace('\n', ' '))
+        return ip_data
+        
 #
 # initialize
 #
 
 service = deploy_mongo()
 
+'''
 print service.username
 pprint(service.config)
 pprint(service.data)
@@ -98,22 +120,17 @@ service._prepare_cloudmesh()
 service._delete_cluster()
 service._create_cluster()
 
+#
+# get the ips
+#
+print service._vm_names_cluster()
+'''
+
+pprint (service._ips_cluster())
+
 
 sys.exit()
 
 
-# Display the list of all the VMs in the group
-json_data = cloudmesh.shell('group show {groupname} --format=json'.format(**data))
-pprint(json_data)
-data = json.loads(json_data.replace('\r\n', '\\r\\n'))
-vm_list = data["VM"]
-data_vm_list  = {"vm_list":vm_list}
-pprint(vm_list)
-
-# Display all the Public IP of the VMs
-json_data = cloudmesh.shell('vm ip show --names={vm_list} --format=json'.format(**data_vm_list))
-data = json.loads(json_data.replace('\r\n', '\\r\\n'))
-ip_list=str(data)
-pprint(ip_list)
 
 
