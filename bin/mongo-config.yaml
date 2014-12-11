@@ -1,10 +1,10 @@
-setup:
+cloud:
   cloud: india
   project: fg452
 
-user:
-  cluster_groupname: rsinghania-mongo-cluster
-  login_name: ubuntu
+config:
+  group_postfix: mongo-cluster
+  login: ubuntu
   flavor: m1.medium
   count: 3
   image: fg452/rsinghania-001/my-ubuntu-01

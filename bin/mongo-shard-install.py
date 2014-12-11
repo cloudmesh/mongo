@@ -6,162 +6,131 @@ from pprint import pprint
 import os
 import yaml
 import json
+import sys
 
-# Hello World
-print ("Hello, World!")
+class known_hosts(object):
 
-# Reading yaml file for configuration
-with open('mongo-config.yaml', 'r') as f:
-    doc = yaml.load(f)
+    def __init__(self):
+        self.filename = os.path.expanduser('~/.ssh/known_hosts')
+        self.load()
+        
+    def delete(self, prefix):
+        for key in self.keys:
+            if key.startswith(prefix):
+                ip = key.split()[0]
+                print "Deleting:",  ip
 
-cloud_name = doc["setup"]["cloud"]
-project = doc["setup"]["project"]
-group_name = doc["user"]["cluster_groupname"]
-login_name = doc["user"]["login_name"]
-flavor = doc["user"]["flavor"]
-count = doc["user"]["count"]
-image = doc["user"]["image"]
+    def load(self):
+        with open(self.filename, 'r') as f:
+            self.keys = f.read().split("\n")[:-1]
 
-data = {"groupname": group_name,
-        "cloud": cloud_name,
-        "project": project,
-        "login": login_name,
-        "flavor": flavor,
-        "count": count,
-        "image": image}
-pprint(data)
+    def save(self):
+        with open(self.filename, 'w') as f:
+            for key in self.keys:
+                f.write(key + "\n")
 
-cloudmesh.shell("cloud on {cloud}".format(**data))
-cloudmesh.shell("cloud select {cloud}".format(**data))
-cloudmesh.shell("project default {project}".format(**data))
+                
+class deploy_mongo(object):
 
-result = cloudmesh.shell('cluster create '
-                         ' --force'
-                         ' --count={count}'
-                         ' --group={groupname}'
-                         ' --ln={login}'
-                         ' --cloud={cloud}'
-                         ' --flavor={flavor}'
-                         ' --image={image}'.format(**data))
-pprint(result)
+    def __init__(self, filename='mongo-config.yaml'):
+        self.username = cloudmesh.load().username()
+        with open(filename, 'r') as f:
+            self.config = yaml.load(f)
+        pprint (self.config)
+        self.data = dict(self.config['config'].items() + self.config['cloud'].items())  
+        self.data["groupname"] = self.username + '-' + self.config['config']['group_postfix']
 
-# Display the list of all the VMs in the group
-json_data = cloudmesh.shell('group show {groupname} --format=json'.format(**data))
-pprint(json_data)
-data = json.loads(str(json_data))
-vm_list = data["VM"]
-data_vm_list  = {"vm_list":vm_list}
-pprint(vm_list)
+    def _execute(self, commands):
+        for command in commands:
+            print "cm>", command
+            r = cloudmesh.shell(command)
+            print r
+        
+    def _prepare_cloudmesh(self):
+        commands = [
+            "cloud on {cloud}".format(**self.data),
+            "cloud select {cloud}".format(**self.data),
+            "project default {project}".format(**self.data)
+        ]
+        self._execute(commands)
 
-# Display all the Public IP of the VMs
-json_data = cloudmesh.shell('vm ip show --names={vm_list} --format=json'.format(**data_vm_list))
-data = json.loads(str(json_data))
-ip_list=str(data)
-pprint(ip_list)
+    def _delete_cluster(self):
+        commands = ['vm delete --cloud={cloud} --group={groupname} --force'.format(**self.data)]
+        self._execute(commands)
+                        
+    def _create_cluster(self):
+        commands = str('cluster create '
+                      ' --force'
+                      ' --count={count}'
+                      ' --group={groupname}'
+                      ' --ln={login}'
+                      ' --cloud={cloud}'
+                      ' --flavor={flavor}'
+                      ' --image={image}'.format(**self.data))
+        self._execute(commands)        
 
-#Delete the group and the VMs in it
-cloudmesh.shell('vm delete --cloud={cloud} --group={groupname} --force'.format(**data))
+    def _vm_names_cluster(self):
+        '''Display the list of all the VMs in the group'''
+        command = 'group show {groupname} --format=json'.format(**self.data)
+        print "cm>", command
+        json_data = cloudmesh.shell(command)
+        pprint(json_data)
+        if not 'VM' in json_data:
+            vm_list = []
+        vms = json.loads(json_data.replace("\n"," "))            
+        vm_list = vms["VM"]
+        vm_list = [x.encode('UTF8') for x in vm_list]
+        return vm_list
 
+    def _ips_cluster(self):
+        vms = self._vm_names_cluster()
+        vms_string = ",".join(vms)
+        command = 'vm ip show --names="{0}" --format=json'.format(vms_string)
+        print "cm>", command
+        json_data = cloudmesh.shell(command)
+        ip_data = json.loads(json_data.replace('\n', ' '))
+        return ip_data
+        
+#
+# initialize
+#
 
-mesh = cloudmesh.mesh("mongo")
-username = cloudmesh.load().username()
-mesh.activate(username)
-print (username)
-
-
-#Set the default flavor and image for VM creation
-cloud = 'india'
-flavor = mesh.flavor('india', 'm1.medium')
-image=mesh.image('india','fg452/rsinghania-001/my-ubuntu-01')
-defaults = mesh.default('india', 'image', image)
-defaults = mesh.default('india', 'flavor', flavor)
-
-#start 9 VMs : For setting sharding in MongoDB
-# 3 Config Server, 2 Query Routers, 4 Shard Servers
-print ("Firing 9 VMs for setting up sharded MongoDB")
-Server_IPs = []
-for x in range(9):
-	result = mesh.start(cloud='india', cm_user_id=username, flavor=flavor, image=image)
-	pprint (result)
-	server = result['server']['id']
-	pprint (result['name'])
-	ip=mesh.assign_public_ip('india', server, username)
-	Server_IPs.append(ip)
-
-#print all IPs 
-Config_Server = []
-Router_Server = []
-Shard_Server = []
-
-counter = 0
-for ip in Server_IPs:	
-	command = 'ssh-keygen -R ' + ip
-	os.system(command)
-	if counter <= 2:
-		Config_Server.append(ip)
-	elif counter > 2 and counter <=4:
-		Router_Server.append(ip)
-	else:
-		Shard_Server.append(ip)	
-	counter = counter + 1
-	
-print ("==============Printing IPs for Config Servers============")
-for ip in Config_Server:
-	print ip
-
-print ("==============Printing IPs for Query Router==============")
-for ip in Router_Server:
-	print ip
-
-print ("==============Printing IPs for Shard Server==============")
-for ip in Shard_Server:
-	print ip
+service = deploy_mongo()
 
 
-# Wait for a minute for all the Vms to build and start
-print "Waiting for a minute to let VMs build and start"
-time.sleep(60)
+print service.username
+pprint(service.config)
+pprint(service.data)
 
-# Install mongoDB on all the servers
-print("=====Installing MongoDB on all the VMs and enable ubuntu firewall for connection to mongoDB instance=====")
-script = """
-sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 7F0CEB10
-echo 'deb http://downloads-distro.mongodb.org/repo/ubuntu-upstart dist 10gen' | sudo tee /etc/apt/sources.list.d/mongodb.list
-sudo apt-get update
-sudo apt-get install -y mongodb-org"""
+#
+# prepare known hosts file
+#
+hosts = known_hosts()
+hosts.delete('149')
+hosts.save()
 
-commands = script.split("\n")[1:]
-for ip in Server_IPs:
-	result = mesh.wait(ipaddr=ip, interval=10, retry=10)
-	print (result)
-	for command in commands:
-		print ('>execute', command)		
-		mesh.ssh_execute(ipaddr=ip, command=command)
+#
+# prepare cloudmesh
+#
+service._prepare_cloudmesh()
+
+#
+# remove old clusters
+#
+service._delete_cluster()
+service._create_cluster()
+
+#
+# get the ips
+#
+print service._vm_names_cluster()
 
 
-# Setup Config server
-print("=====Setting up Config Server=====")
-script = """
-sudo mkdir ~/mongo-metadata
-sudo mkdir ~/mongo-log
-sudo mongod --fork --configsvr --dbpath ~/mongo-metadata --logpath ~/mongo-log/log.data --port 27019"""
-commands = script.split("\n")[1:]
-for ip in Config_Server:
-	result = mesh.wait(ipaddr=ip, interval=10, retry=10)
-	print (result)
-	for command in commands:
-		print ('>execute', command)		
-		mesh.ssh_execute(ipaddr=ip, command=command)
+pprint (service._ips_cluster())
 
-# Setup Router Server
-print("=====Setting up Query Router=====")
-port = ":27019"
-ip_list = Shard_Server[0] + "," + Shard_Server[1] + "," + Shard_Server[2]  + "," + Shard_Server[3]
-config_command = "sudo mongos --fork --logpath ~/mongo-log/log.data --bind_ip " + ip_list + " --configdb " + Config_Server[0] + port + "," + Config_Server[1] + port + "," + Config_Server[2] + port
-for ip in Router_Server:
-	result = mesh.wait(ipaddr=ip, interval=10, retry=10)
-	print (result)
-	print ('>execute', 'sudo mkdir ~/mongo-log')	
-	mesh.ssh_execute(ipaddr=ip, command='sudo mkdir ~/mongo-log')
-	print ('>execute', config_command)	
-	mesh.ssh_execute(ipaddr=ip, command=config_command)
+
+sys.exit()
+
+
+
+
