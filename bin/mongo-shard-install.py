@@ -59,7 +59,14 @@ class deploy_mongo(object):
         self._execute(commands)
                         
     def _create_cluster(self):
-        commands = ['cluster create --force --count={count} --group={groupname} --ln={login} --cloud={cloud} --flavor={flavor} --image={image}'.format(**self.data)]
+        commands = ['cluster create '
+                    ' --force'
+                    ' --count={count}'
+                    ' --group={groupname}'
+                    ' --ln={login}'
+                    ' --cloud={cloud}'
+                    ' --flavor={flavor}'
+                    ' --image={image}'.format(**self.data)]
         self._execute(commands)        
 
     def _vm_names_cluster(self):
@@ -78,7 +85,7 @@ class deploy_mongo(object):
     def _ips_cluster(self):
         vms = self._vm_names_cluster()
         vms_string = ",".join(vms)
-        command = 'vm ip show --names="{0}" --format=json'.format(vms_string)
+        command = 'vm ip show --names={0} --format=json'.format(vms_string)
         print "cm>", command
         json_data = cloudmesh.shell(command)
         ip_data = json.loads(json_data.replace('\n', ' '))
@@ -123,7 +130,3 @@ pprint (service._ips_cluster())
 
 
 sys.exit()
-
-
-
-
