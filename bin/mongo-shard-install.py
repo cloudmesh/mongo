@@ -59,14 +59,7 @@ class deploy_mongo(object):
         self._execute(commands)
                         
     def _create_cluster(self):
-        commands = str('cluster create '
-                      ' --force'
-                      ' --count={count}'
-                      ' --group={groupname}'
-                      ' --ln={login}'
-                      ' --cloud={cloud}'
-                      ' --flavor={flavor}'
-                      ' --image={image}'.format(**self.data))
+        commands = ['cluster create --force --count={count} --group={groupname} --ln={login} --cloud={cloud} --flavor={flavor} --image={image}'.format(**self.data)]
         self._execute(commands)        
 
     def _vm_names_cluster(self):
