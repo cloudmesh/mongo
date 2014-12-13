@@ -89,7 +89,78 @@ class deploy_mongo(object):
         print "cm>", command
         json_data = cloudmesh.shell(command)
         ip_data = json.loads(json_data.replace('\n', ' '))
+        pprint(ip_data)
         return ip_data
+        
+    def _ips_list(self):
+        ip_data = self._ips_cluster()
+        ip_list = ip_data["floating"]
+        ip_list = [x.encode('UTF8') for x in ip_list]
+        self.ip_list = ip_list
+        counter = 0
+        for ip in ip_list:	
+            if counter <= 2:
+                self.config_Server.append(ip)
+            elif counter > 2 and counter <=4:
+                self.router_server.append(ip)
+            else:
+                self.shard_server.append(ip)	
+            counter = counter + 1
+            
+        print("List of config server")
+        pprint(self.config_server)
+        print("List of router server")
+        pprint(self.router_server)
+        print("List of shard server")
+        pprint(self.shard_server)
+        return ip_list
+		
+    def _install_mongo(self):
+        print "Waiting for a minute to let VMs build and start"
+        time.sleep(60)		
+        # Install mongoDB on all the servers
+        print("=====Installing MongoDB on all the VMs =====")
+        script = """
+        sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 7F0CEB10
+        echo 'deb http://downloads-distro.mongodb.org/repo/ubuntu-upstart dist 10gen' | sudo tee /etc/apt/sources.list.d/mongodb.list
+        sudo apt-get update
+        sudo apt-get install -y mongodb-org"""
+        commands = script.split("\n")[1:]
+        for ip in self.ip_list:
+            result = mesh.wait(ipaddr=ip, interval=10, retry=10)
+            print (result)
+            for command in commands:
+                print ('>execute', command)		
+                mesh.ssh_execute(ipaddr=ip, command=command)
+				
+    def _setup_mongo_configServer(self):
+        print("=====Setting up Config Server=====")
+        script = """
+        sudo mkdir ~/mongo-metadata
+        sudo mkdir ~/mongo-log
+        sudo mongod --fork --configsvr --dbpath ~/mongo-metadata --logpath ~/mongo-log/log.data --port 27019"""
+        commands = script.split("\n")[1:]
+        for ip in self.config_server:
+            result = mesh.wait(ipaddr=ip, interval=10, retry=10)
+            print (result)
+            for command in commands:
+                print ('>execute', command)		
+                mesh.ssh_execute(ipaddr=ip, command=command)
+                
+    def _setup_mongo_routerServer(self):
+        # Setup Router Server
+        print("=====Setting up Query Router=====")
+        port = ":27019"
+        ip_list = self.shard_server[0] + "," + self.shard_server[1] + "," + self.shard_server[2]  + "," + self.shard_server[3]
+        config_command = "sudo mongos --fork --logpath ~/mongo-log/log.data --bind_ip " + ip_list + " --configdb " + self.config_server[0] + port + "," + self.config_server[1] + port + "," + self.config_server[2] + port
+        for ip in Router_Server:
+            result = mesh.wait(ipaddr=ip, interval=10, retry=10)
+            print (result)
+            print ('>execute', 'sudo mkdir ~/mongo-log')	
+            mesh.ssh_execute(ipaddr=ip, command='sudo mkdir ~/mongo-log')
+            print ('>execute', config_command)	
+            mesh.ssh_execute(ipaddr=ip, command=config_command)
+		
         
 #
 # initialize
@@ -124,9 +195,6 @@ service._create_cluster()
 # get the ips
 #
 print service._vm_names_cluster()
-
-
-pprint (service._ips_cluster())
-
+pprint (service._ips_list())
 
 sys.exit()
