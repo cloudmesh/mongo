@@ -94,13 +94,18 @@ class deploy_mongo(object):
         
     def _ips_list(self):
         ip_data = self._ips_cluster()
-        ip_list = ip_data["floating"]
-        ip_list = [x.encode('UTF8') for x in ip_list]
-        self.ip_list = ip_list
+        self.ip_list = []
+        self.config_server = []
+        self.router_server = []
+        self.shard_server = []
+        
+        for i in ip_data:
+            self.ip_list.append(ip_data[i]["floating"])        
+        self.ip_list = [x.encode('UTF8') for x in self.ip_list]
         counter = 0
-        for ip in ip_list:	
+        for ip in self.ip_list:	
             if counter <= 2:
-                self.config_Server.append(ip)
+                self.config_server.append(ip)
             elif counter > 2 and counter <=4:
                 self.router_server.append(ip)
             else:
@@ -113,9 +118,11 @@ class deploy_mongo(object):
         pprint(self.router_server)
         print("List of shard server")
         pprint(self.shard_server)
-        return ip_list
-		
+        		
     def _install_mongo(self):
+        self.mesh = cloudmesh.mesh("mongo")
+        username = cloudmesh.load().username()
+        self.mesh.activate(username)
         print "Waiting for a minute to let VMs build and start"
         time.sleep(60)		
         # Install mongoDB on all the servers
@@ -127,11 +134,11 @@ class deploy_mongo(object):
         sudo apt-get install -y mongodb-org"""
         commands = script.split("\n")[1:]
         for ip in self.ip_list:
-            result = mesh.wait(ipaddr=ip, interval=10, retry=10)
+            result = self.mesh.wait(ipaddr=ip, interval=10, retry=10)
             print (result)
             for command in commands:
                 print ('>execute', command)		
-                mesh.ssh_execute(ipaddr=ip, command=command)
+                self.mesh.ssh_execute(ipaddr=ip, command=command)
 				
     def _setup_mongo_configServer(self):
         print("=====Setting up Config Server=====")
@@ -141,11 +148,11 @@ class deploy_mongo(object):
         sudo mongod --fork --configsvr --dbpath ~/mongo-metadata --logpath ~/mongo-log/log.data --port 27019"""
         commands = script.split("\n")[1:]
         for ip in self.config_server:
-            result = mesh.wait(ipaddr=ip, interval=10, retry=10)
+            result = self.mesh.wait(ipaddr=ip, interval=10, retry=10)
             print (result)
             for command in commands:
                 print ('>execute', command)		
-                mesh.ssh_execute(ipaddr=ip, command=command)
+                self.mesh.ssh_execute(ipaddr=ip, command=command)
                 
     def _setup_mongo_routerServer(self):
         # Setup Router Server
@@ -153,13 +160,13 @@ class deploy_mongo(object):
         port = ":27019"
         ip_list = self.shard_server[0] + "," + self.shard_server[1] + "," + self.shard_server[2]  + "," + self.shard_server[3]
         config_command = "sudo mongos --fork --logpath ~/mongo-log/log.data --bind_ip " + ip_list + " --configdb " + self.config_server[0] + port + "," + self.config_server[1] + port + "," + self.config_server[2] + port
-        for ip in Router_Server:
-            result = mesh.wait(ipaddr=ip, interval=10, retry=10)
+        for ip in self.router_server:
+            result = self.mesh.wait(ipaddr=ip, interval=10, retry=10)
             print (result)
             print ('>execute', 'sudo mkdir ~/mongo-log')	
-            mesh.ssh_execute(ipaddr=ip, command='sudo mkdir ~/mongo-log')
+            self.mesh.ssh_execute(ipaddr=ip, command='sudo mkdir ~/mongo-log')
             print ('>execute', config_command)	
-            mesh.ssh_execute(ipaddr=ip, command=config_command)
+            self.mesh.ssh_execute(ipaddr=ip, command=config_command)
 		
         
 #
@@ -196,5 +203,16 @@ service._create_cluster()
 #
 print service._vm_names_cluster()
 pprint (service._ips_list())
+
+#
+# Install MongoDB on all the VMs
+#
+service._install_mongo()
+
+#
+# Setup mongoDB servers
+#
+service._setup_mongo_configServer()
+service._setup_mongo_routerServer()
 
 sys.exit()

@@ -6,7 +6,7 @@ config:
   group_postfix: mongo-cluster
   login: ubuntu
   flavor: m1.medium
-  count: 3
+  count: 9
   image: fg452/rsinghania-001/my-ubuntu-01
   
 
