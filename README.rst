@@ -125,7 +125,7 @@ Troubleshoot guide
   
      fab server.start
 
-   restarts the server and deleted any unused instances.
+  restarts the server and deleted any unused instances.
 * Usefullinkswhileworkingwithscripting:
 Shell Commands Documentation: http://cloudmesh.github.io/cloudmesh/man/man.html#cluster
 Shell API tutorial
