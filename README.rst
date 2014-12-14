@@ -62,7 +62,7 @@ to all three places:
 
     “nova keypair-list”
 
-   and make sure the same key is present in openstack, if not add it manually.
+  and make sure the same key is present in openstack, if not add it manually.
 
 Introduction to Cloudmesh
 ----------------------------------------------------------------------
